@@ -18,28 +18,30 @@
     void init();
     void bind();
     void draw();
+    bool close();
     void title(const std::string &_title);
 
 	private:
-		bool m_update;
-		float m_trans_x, m_trans_y;
-		float m_scale;
-
     GLFWwindow* m_window;
-    GLunit m_texture;
-    GLunit m_shader_program;
-    GLunit m_vertex_shader;
-    GLunit m_fragment_shader;
-    GLunit m_vbo;
-    GLunit m_vao;
+    GLuint m_texture;
+    GLuint m_shader_program;
+    GLuint m_vertex_shader;
+    GLuint m_fragment_shader;
+    GLuint m_vbo;
+    GLuint m_vao;
     GLint m_pos_attrib;
-    Glint m_tex_attrib;
-    Glint m_trans_uniform;
-    Glint m_scale_uniform;
+    GLint m_tex_attrib;
+    GLint m_trans_uniform;
+    GLint m_scale_uniform;
 
     void createContext();
     void createSurface();
-    void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
+  public:
+    bool m_update;
+    float m_trans_x, m_trans_y;
+    float m_scale;
 	};
 	
 #endif

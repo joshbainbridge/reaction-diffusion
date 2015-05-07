@@ -1,6 +1,9 @@
 #include <Framebuffer.h>
 #include <iostream>
 
+#define WIDTH 700
+#define HEIGHT 500
+
 Framebuffer::~Framebuffer()
 {
   glDeleteTextures(1, &m_texture);
@@ -42,11 +45,23 @@ void Framebuffer::draw()
   
   glfwSwapBuffers(m_window);
   glfwPollEvents();
+
+  if(m_update)
+  {
+    m_update = false;
+    glUniform2f(m_trans_uniform, m_trans_x, m_trans_y);
+    glUniform1f(m_scale_uniform, m_scale);
+  }
+}
+
+bool Framebuffer::close()
+{
+  return glfwWindowShouldClose(m_window);
 }
 
 void Framebuffer::title(const std::string &_title)
 {
-  glfwSetWindowTitle(window, _title.c_str());
+  glfwSetWindowTitle(m_window, _title.c_str());
 }
 
 void Framebuffer::createSurface()
@@ -109,18 +124,18 @@ void Framebuffer::createSurface()
   glUseProgram(m_shader_program);
 
   m_pos_attrib = glGetAttribLocation(m_shader_program, "position");
-  glVertexAttribPointer(pos_attrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
-  glEnableVertexAttribArray(pos_attrib);
+  glVertexAttribPointer(m_pos_attrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
+  glEnableVertexAttribArray(m_pos_attrib);
 
   m_tex_attrib = glGetAttribLocation(m_shader_program, "coordinate");
-  glVertexAttribPointer(tex_attrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
-  glEnableVertexAttribArray(tex_attrib);
+  glVertexAttribPointer(m_tex_attrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
+  glEnableVertexAttribArray(m_tex_attrib);
 
   m_trans_uniform = glGetUniformLocation(m_shader_program, "translation");
-  glUniform2f(trans_uniform, m_trans_x, m_trans_y);
+  glUniform2f(m_trans_uniform, m_trans_x, m_trans_y);
 
   m_scale_uniform = glGetUniformLocation(m_shader_program, "scale");
-  glUniform1f(scale_uniform, m_scale);
+  glUniform1f(m_scale_uniform, m_scale);
 
   float *pixels = new float[256*256*3];
   for(int i = 0; i < 196608; ++i)
@@ -156,6 +171,7 @@ void Framebuffer::createContext()
   glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
   
   m_window = glfwCreateWindow(WIDTH, HEIGHT, "Graphics Environment", NULL, NULL);
+  glfwSetWindowUserPointer(m_window, this);
 
   glfwMakeContextCurrent(m_window);
   glfwSwapInterval(false);
@@ -180,31 +196,33 @@ void Framebuffer::createContext()
 
 void Framebuffer::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
+  Framebuffer *framebuffer = static_cast<Framebuffer*>(glfwGetWindowUserPointer(window));
+
   if(action == GLFW_PRESS)
   {
-    m_update = true;
+    framebuffer->m_update = true;
     switch(key)
     {
       case GLFW_KEY_ESCAPE:
-        glfwSetWindowShouldClose(m_window, GL_TRUE);
+        glfwSetWindowShouldClose(window, GL_TRUE);
         break;
       case GLFW_KEY_RIGHT:
-        m_trans_x += 0.1f;
+        framebuffer->m_trans_x += 0.1f;
         break;
       case GLFW_KEY_LEFT:
-        m_trans_x -= 0.1f;
+        framebuffer->m_trans_x -= 0.1f;
         break;
       case GLFW_KEY_UP:
-        m_trans_y += 0.1f;
+        framebuffer->m_trans_y += 0.1f;
         break;
       case GLFW_KEY_DOWN:
-        m_trans_y -= 0.1f;
+        framebuffer->m_trans_y -= 0.1f;
         break;
       case GLFW_KEY_X:
-        m_scale += 0.1f;
+        framebuffer->m_scale += 0.1f;
         break;
       case GLFW_KEY_Z:
-        m_scale -= 0.1f;
+        framebuffer->m_scale -= 0.1f;
         break;
     }
   }

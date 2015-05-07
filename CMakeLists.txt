@@ -11,9 +11,11 @@ set( INC include)
 
 SET( PROJ_SOURCES
   ${SRC}/main.cpp
+  ${SRC}/Framebuffer.cpp
   )
 SET( PROJ_HEADERS
-  ${INC}/${CMAKE_PROJECT_NAME}/platformSpecification.hpp
+  ${INC}/PlatformSpecification.h
+  ${INC}/Framebuffer.h
   )
 
 ADD_EXECUTABLE( ${CMAKE_PROJECT_NAME} ${PROJ_SOURCES} ${PROJ_HEADERS} )
