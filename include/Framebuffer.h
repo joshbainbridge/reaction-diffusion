@@ -9,6 +9,11 @@
 	public:
 		Framebuffer()
       : m_update(true)
+      , m_pan(false)
+      , m_screen_x(0.f)
+      , m_screen_y(0.f)
+      , m_state_x(0.f)
+      , m_state_y(0.f)
       , m_trans_x(0.f)
       , m_trans_y(0.f)
       , m_scale(1.f)
@@ -37,9 +42,15 @@
     void createContext();
     void createSurface();
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+    static void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
+    static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 
-  public:
+  private:
     bool m_update;
+    bool m_pan;
+    float m_screen_x, m_screen_y;
+    float m_state_x, m_state_y;
     float m_trans_x, m_trans_y;
     float m_scale;
 	};

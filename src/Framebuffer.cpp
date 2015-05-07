@@ -1,5 +1,6 @@
 #include <Framebuffer.h>
 #include <iostream>
+#include <math.h>
 
 #define WIDTH 700
 #define HEIGHT 500
@@ -23,6 +24,9 @@ void Framebuffer::init()
   createSurface();
 
   glfwSetKeyCallback(m_window, keyCallback);
+  glfwSetScrollCallback(m_window, scrollCallback);
+  glfwSetCursorPosCallback(m_window, cursorPositionCallback);
+  glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
 }
 
 void Framebuffer::bind()
@@ -70,13 +74,13 @@ void Framebuffer::createSurface()
   glBindVertexArray(m_vao);
 
   float vertices[] = {
-    -0.5f,  0.5f, 0.f, 1.f,
-     0.5f,  0.5f, 1.f, 1.f,
-     0.5f, -0.5f, 1.f, 0.f,
+    -1.f,  1.f, 0.f, 1.f,
+     1.f,  1.f, 1.f, 1.f,
+     1.f, -1.f, 1.f, 0.f,
 
-     0.5f, -0.5f, 1.f, 0.f,
-    -0.5f, -0.5f, 0.f, 0.f,
-    -0.5f,  0.5f, 0.f, 1.f
+     1.f, -1.f, 1.f, 0.f,
+    -1.f, -1.f, 0.f, 0.f,
+    -1.f,  1.f, 0.f, 1.f
   };
 
   glGenBuffers(1, &m_vbo);
@@ -95,7 +99,7 @@ void Framebuffer::createSurface()
     "{"
     "   Color = vec3(coordinate, 1.0);"
     "   Coordinate = coordinate;"
-    "   gl_Position = vec4(position * scale + translation, 0.0, 1.0);"
+    "   gl_Position = vec4((position + translation) * scale, 0.0, 1.0);"
     "}";
 
   const GLchar* fragment_source =
@@ -137,21 +141,21 @@ void Framebuffer::createSurface()
   m_scale_uniform = glGetUniformLocation(m_shader_program, "scale");
   glUniform1f(m_scale_uniform, m_scale);
 
-  float *pixels = new float[256*256*3];
-  for(int i = 0; i < 196608; ++i)
+  float *pixels = new float[10*10*3];
+  for(int i = 0; i < 300; ++i)
   {
-    pixels[i] = static_cast<float>(i) / 196608;
+    pixels[i] = static_cast<float>(i) / 300;
   }
 
   glGenTextures(1, &m_texture);
   glBindTexture(GL_TEXTURE_2D, m_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 256, 256, 0, GL_RGB, GL_FLOAT, pixels);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 10, 10, 0, GL_RGB, GL_FLOAT, pixels);
   delete[] pixels;
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT); 
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); 
 }
 
 void Framebuffer::createContext()
@@ -206,24 +210,59 @@ void Framebuffer::keyCallback(GLFWwindow* window, int key, int scancode, int act
       case GLFW_KEY_ESCAPE:
         glfwSetWindowShouldClose(window, GL_TRUE);
         break;
-      case GLFW_KEY_RIGHT:
-        framebuffer->m_trans_x += 0.1f;
-        break;
-      case GLFW_KEY_LEFT:
-        framebuffer->m_trans_x -= 0.1f;
-        break;
-      case GLFW_KEY_UP:
-        framebuffer->m_trans_y += 0.1f;
-        break;
-      case GLFW_KEY_DOWN:
-        framebuffer->m_trans_y -= 0.1f;
-        break;
-      case GLFW_KEY_X:
-        framebuffer->m_scale += 0.1f;
-        break;
-      case GLFW_KEY_Z:
-        framebuffer->m_scale -= 0.1f;
+      case GLFW_KEY_F:
+        framebuffer->m_trans_x = 0.f;
+        framebuffer->m_trans_y = 0.f;
+        framebuffer->m_scale = 1.f;
         break;
     }
+  }
+}
+
+void Framebuffer::scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
+{
+  Framebuffer *framebuffer = static_cast<Framebuffer*>(glfwGetWindowUserPointer(window));
+
+  float scale = framebuffer->m_scale;
+  scale += scale * yoffset * 0.05f;
+  if(scale > 0.02f && scale < 20.f)
+  {
+    framebuffer->m_update = true;
+    framebuffer->m_scale += yoffset * scale * 0.05f;
+  }
+}
+
+void Framebuffer::cursorPositionCallback(GLFWwindow* window, double xpos, double ypos)
+{
+  Framebuffer *framebuffer = static_cast<Framebuffer*>(glfwGetWindowUserPointer(window));
+
+  if(framebuffer->m_pan)
+  {
+    framebuffer->m_update = true;
+    float scale = 2 / framebuffer->m_scale;
+    framebuffer->m_trans_x = framebuffer->m_state_x + ((xpos - framebuffer->m_screen_x) / WIDTH) * scale;
+    framebuffer->m_trans_y = framebuffer->m_state_y + ((framebuffer->m_screen_y - ypos) / HEIGHT) * scale;
+  }
+}
+
+void Framebuffer::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+{
+  Framebuffer *framebuffer = static_cast<Framebuffer*>(glfwGetWindowUserPointer(window));
+
+  if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+  {
+    framebuffer->m_pan = true;
+
+    framebuffer->m_state_x = framebuffer->m_trans_x;
+    framebuffer->m_state_y = framebuffer->m_trans_y;
+
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
+    framebuffer->m_screen_x = xpos;
+    framebuffer->m_screen_y = ypos;
+  }
+  else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+  {
+    framebuffer->m_pan = false;
   }
 }
