@@ -41,9 +41,9 @@ void Framebuffer::bind()
 
 void Framebuffer::draw()
 {
-  glEnable(GL_DEPTH_TEST);
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glEnable(GL_FRAMEBUFFER_SRGB);
+  glClearColor(0.25f, 0.25f, 0.25f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
 
   glDrawArrays(GL_TRIANGLES, 0, 6);
   
@@ -93,24 +93,21 @@ void Framebuffer::createSurface()
     "in vec2 coordinate;"
     "uniform vec2 translation;"
     "uniform float scale;"
-    "out vec3 Color;"
     "out vec2 Coordinate;"
     "void main()"
     "{"
-    "   Color = vec3(coordinate, 1.0);"
     "   Coordinate = coordinate;"
     "   gl_Position = vec4((position + translation) * scale, 0.0, 1.0);"
     "}";
 
   const GLchar* fragment_source =
     "#version 330\n"
-    "in vec3 Color;"
     "in vec2 Coordinate;"
     "uniform sampler2D tex;"
     "out vec4 outColor;"
     "void main()"
     "{"
-    "   outColor = texture(tex, Coordinate) * vec4(Color, 1.0);"
+    "   outColor = texture(tex, Coordinate);"
     "}";
 
   m_vertex_shader = glCreateShader(GL_VERTEX_SHADER);
@@ -154,8 +151,8 @@ void Framebuffer::createSurface()
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); 
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); 
 }
 
 void Framebuffer::createContext()
@@ -171,6 +168,7 @@ void Framebuffer::createContext()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+  glfwWindowHint(GLFW_SRGB_CAPABLE, GL_TRUE);
   glfwWindowHint(GLFW_SAMPLES, 2);
   glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
   
