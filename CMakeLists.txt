@@ -1,5 +1,5 @@
 CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
-PROJECT( "graphics-env" )
+PROJECT( "reaction-diffusion" )
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake $ENV{CMAKE_MODULE_PATH})
 
@@ -12,10 +12,12 @@ set( INC include)
 SET( PROJ_SOURCES
   ${SRC}/main.cpp
   ${SRC}/Framebuffer.cpp
+  ${SRC}/Perlin.cpp
   )
 SET( PROJ_HEADERS
   ${INC}/PlatformSpecification.h
   ${INC}/Framebuffer.h
+  ${INC}/Perlin.h
   )
 
 ADD_EXECUTABLE( ${CMAKE_PROJECT_NAME} ${PROJ_SOURCES} ${PROJ_HEADERS} )

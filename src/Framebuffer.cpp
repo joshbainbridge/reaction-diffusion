@@ -1,9 +1,5 @@
 #include <Framebuffer.h>
 #include <iostream>
-#include <math.h>
-
-#define WIDTH 700
-#define HEIGHT 500
 
 Framebuffer::~Framebuffer()
 {
@@ -18,23 +14,37 @@ Framebuffer::~Framebuffer()
   glfwTerminate();
 }
 
-void Framebuffer::init()
+GLFWwindow* Framebuffer::init(const int _resx, const int _resy, void* input_data)
 {
+  m_res_x = _resx;
+  m_res_y = _resy;
+
   createContext();
   createSurface();
 
-  glfwSetKeyCallback(m_window, keyCallback);
-  glfwSetScrollCallback(m_window, scrollCallback);
-  glfwSetCursorPosCallback(m_window, cursorPositionCallback);
-  glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
+  if(input_data != NULL)
+  {
+    glfwSetWindowUserPointer(m_window, input_data);
+  }
+  else
+  {
+    glfwSetWindowUserPointer(m_window, this);
+    glfwSetKeyCallback(m_window, keyCallback);
+    glfwSetScrollCallback(m_window, scrollCallback);
+    glfwSetCursorPosCallback(m_window, cursorPositionCallback);
+    glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
+  }
+
+  return m_window;
 }
 
 void Framebuffer::bind()
 {
   glfwMakeContextCurrent(m_window);
-  glUseProgram(m_shader_program);
 
+  glUseProgram(m_shader_program);
   glBindVertexArray(m_vao);
+
   glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
   glBindTexture(GL_TEXTURE_2D, m_texture);
 }
@@ -61,6 +71,13 @@ void Framebuffer::draw()
 bool Framebuffer::close()
 {
   return glfwWindowShouldClose(m_window);
+}
+
+
+void Framebuffer::image(const float *_image, const int _resx, const int _resy)
+{
+  glBindTexture(GL_TEXTURE_2D, m_texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, _resx, _resy, 0, GL_RGB, GL_FLOAT, _image);
 }
 
 void Framebuffer::title(const std::string &_title)
@@ -138,16 +155,9 @@ void Framebuffer::createSurface()
   m_scale_uniform = glGetUniformLocation(m_shader_program, "scale");
   glUniform1f(m_scale_uniform, m_scale);
 
-  float *pixels = new float[10*10*3];
-  for(int i = 0; i < 300; ++i)
-  {
-    pixels[i] = static_cast<float>(i) / 300;
-  }
-
   glGenTextures(1, &m_texture);
   glBindTexture(GL_TEXTURE_2D, m_texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 10, 10, 0, GL_RGB, GL_FLOAT, pixels);
-  delete[] pixels;
+  // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 10, 10, 0, GL_RGB, GL_FLOAT, pixels);
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -172,8 +182,7 @@ void Framebuffer::createContext()
   glfwWindowHint(GLFW_SAMPLES, 2);
   glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
   
-  m_window = glfwCreateWindow(WIDTH, HEIGHT, "Graphics Environment", NULL, NULL);
-  glfwSetWindowUserPointer(m_window, this);
+  m_window = glfwCreateWindow(m_res_x, m_res_y, "Graphics Environment", NULL, NULL);
 
   glfwMakeContextCurrent(m_window);
   glfwSwapInterval(false);
@@ -238,8 +247,8 @@ void Framebuffer::cursorPositionCallback(GLFWwindow* window, double xpos, double
   {
     framebuffer->m_update = true;
     float scale = 2 / framebuffer->m_scale;
-    framebuffer->m_trans_x = framebuffer->m_state_x + ((xpos - framebuffer->m_screen_x) / WIDTH) * scale;
-    framebuffer->m_trans_y = framebuffer->m_state_y + ((framebuffer->m_screen_y - ypos) / HEIGHT) * scale;
+    framebuffer->m_trans_x = framebuffer->m_state_x + ((xpos - framebuffer->m_screen_x) / framebuffer->m_res_x) * scale;
+    framebuffer->m_trans_y = framebuffer->m_state_y + ((framebuffer->m_screen_y - ypos) / framebuffer->m_res_y) * scale;
   }
 }
 
