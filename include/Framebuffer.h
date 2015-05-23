@@ -28,6 +28,7 @@
     bool close();
     void image(const float *_image, const int _resx, const int _resy);
     void title(const std::string &_title);
+    GLuint texture() const;
 
 	private:
     GLFWwindow* m_window;

@@ -1,0 +1,23 @@
+  input.Da = 1.f;
+  input.Db = 0.5f;
+  input.f = 0.055f;
+  input.k = 0.062f;
+  input.delta = 1.f;
+
+  input.Da = 1.f;
+  input.Db = 0.5f;
+  input.f = 0.018f;
+  input.k = 0.051f;
+  input.delta = 1.f;
+
+  input.Da = 1.f;
+  input.Db = 0.5f;
+  input.f = 0.026125f;
+  input.k = 0.051f;
+  input.delta = 1.f;
+  
+  input.Da = 1.f;
+  input.Db = 0.5f;
+  input.f = 0.0367f;
+  input.k = 0.0649f;
+  input.delta = 1.f;

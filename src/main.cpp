@@ -5,8 +5,8 @@
 #include <boost/chrono.hpp>
 #include <boost/thread.hpp>
 #include <boost/random.hpp>
+#include <fstream>
 #include <string>
-#include <math.h>
 
 #define WIDTH 700
 #define HEIGHT 500
@@ -28,6 +28,39 @@ struct SimData
   float a_buffer[SIZE];
   float b_buffer[SIZE];
 };
+
+std::string read_file(const char _filepath[])
+{
+  std::string output;
+  std::ifstream file(_filepath);
+
+  if(file.is_open())
+  {
+    std::string line;
+    while(!file.eof())
+    {
+      std::getline(file, line);
+      output.append(line + "\n");
+    }
+  }
+  else
+  {
+    std::cout << "File could not be opened." << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  file.close();
+  return output;
+}
+
+void opencl_error_check(const cl_int _error)
+{
+  if(_error != CL_SUCCESS)
+  {
+    std::cout << "OpenCL error: " << _error << std::endl;
+    exit(EXIT_FAILURE);
+  }
+}
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -115,50 +148,39 @@ float laplacian(const float* _array, const int _point, const int _width, const i
   return output;
 }
 
-// float laplacian(const float* _array, const int _point, const int _width, const int _height)
-// {
-//   int xpos = _point % _width;
-//   int ypos = _point / _width;
-//   int positive_x = mod(xpos + 1, _width) + (ypos * _width);
-//   int negative_x = mod(xpos - 1, _width) + (ypos * _width);
-//   int positive_y = xpos + mod(ypos + 1, _height) * _width;
-//   int negative_y = xpos + mod(ypos - 1, _height) * _width;
-//   return _array[positive_x] + _array[negative_x] + _array[positive_y] + _array[negative_y] - 4 * _array[_point];
-// }
-
-int main(void)
+int main(int argc, char const *argv[])
 {
-  Perlin perlin;
-
   InputData input;
   input.Da = 1.f;
   input.Db = 0.5f;
-  input.f = 0.055f;
-  input.k = 0.062f;
-  input.delta = 1.f;
+  input.f = 0.018f;
+  input.k = 0.051f;
+  input.delta = 0.8f;
 
   Framebuffer *framebuffer = new Framebuffer();
 
   GLFWwindow* window = framebuffer->init(WIDTH, HEIGHT, &input);
   glfwSetKeyCallback(window, keyCallback);
 
-  boost::mt19937 generator;
-  boost::uniform_real<float> uniform_dist;
-
+  Perlin perlin;
   SimData *data = new SimData;
   for(int i = 0; i < SIZE; ++i)
   {
     float xpos = i % WIDTH;
     float ypos = i / WIDTH;
-    if(perlin.noise(xpos / 100, ypos / 100, 0) > 0.3f)
+    if(perlin.noise(xpos / 100, ypos / 100, 0) > 0.4f)
     {
       data->a_current[i] = 1.f;
       data->b_current[i] = 1.f;
+      data->a_buffer[i] = 0.f;
+      data->b_buffer[i] = 0.f;
     }
     else
     {
       data->a_current[i] = 1.f;
       data->b_current[i] = 0.f;
+      data->a_buffer[i] = 0.f;
+      data->b_buffer[i] = 0.f;
     }
   }
 
@@ -171,27 +193,130 @@ int main(void)
   }
 
   framebuffer->image(image, WIDTH, HEIGHT);
+
+  // OpenCL setup starts here
+
+  // Setup
+  cl_platform_id platform_id;
+  clGetPlatformIDs(1, &platform_id, NULL);
+  cl_uint device_count;
+  clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 0, NULL, &device_count);
+  cl_device_id *device_ids = new cl_device_id[device_count];
+  clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, device_count, device_ids, NULL);
+
+  // Error code
+  cl_int error = CL_SUCCESS;
+
+  // Context creation
+  const cl_context_properties context_properties[] = {
+    CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(platform_id),
+    0
+  };
+  cl_context context = clCreateContext(context_properties, device_count, device_ids, NULL, NULL, &error);
+  opencl_error_check(error);
+
+  // GLuint m_texture;
+  // glGenTextures(1, &m_texture);
+  // glBindTexture(GL_TEXTURE_2D, m_texture);
+  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+  // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+
+  // Memory allocation
+  cl_mem cMem_a = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float) * SIZE, data->a_current, &error);
+  opencl_error_check(error);
+  cl_mem cMem_b = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * SIZE, data->b_current, &error);
+  opencl_error_check(error);
+  cl_mem bMem_a = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * SIZE, data->a_buffer, &error);
+  opencl_error_check(error);
+  cl_mem bMem_b = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * SIZE, data->b_buffer, &error);
+  opencl_error_check(error);
+  // cl_mem mem = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, m_texture, &error);
+  // opencl_error_check(error);
+
+  // Load source file
+  std::string file = read_file("kernals/image.cl");
+  const char* source[] = {file.c_str()};
+
+  // Build program
+  cl_program program = clCreateProgramWithSource(context, 1, source, NULL, &error);
+  opencl_error_check(error);
+  error = clBuildProgram(program, device_count, device_ids, NULL, NULL, NULL);
+  if(error != CL_SUCCESS)
+  {
+    char buffer[2048];
+    clGetProgramBuildInfo(program, device_ids[0], CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, NULL);
+    std::cout << buffer << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  // Resolution for kernal
+  const float width = WIDTH;
+  const float height = HEIGHT;
+
+  // Create kernel one
+  cl_kernel kernel_one = clCreateKernel(program, "square", &error);
+  opencl_error_check(error);
+
+  // Set argurments for kernel one
+  clSetKernelArg(kernel_one, 0, sizeof(cl_mem), &cMem_a);
+  clSetKernelArg(kernel_one, 1, sizeof(cl_mem), &cMem_b);
+  clSetKernelArg(kernel_one, 2, sizeof(cl_mem), &bMem_a);
+  clSetKernelArg(kernel_one, 3, sizeof(cl_mem), &bMem_b);
+  clSetKernelArg(kernel_one, 4, sizeof(InputData), &input);
+  clSetKernelArg(kernel_one, 5, sizeof(float), &width);
+  clSetKernelArg(kernel_one, 6, sizeof(float), &height);
+
+  // Create kernel two
+  cl_kernel kernel_two = clCreateKernel(program, "square", &error);
+  opencl_error_check(error);
+
+  // Set argurments for kernel two
+  clSetKernelArg(kernel_two, 0, sizeof(cl_mem), &bMem_a);
+  clSetKernelArg(kernel_two, 1, sizeof(cl_mem), &bMem_b);
+  clSetKernelArg(kernel_two, 2, sizeof(cl_mem), &cMem_a);
+  clSetKernelArg(kernel_two, 3, sizeof(cl_mem), &cMem_b);
+  clSetKernelArg(kernel_two, 4, sizeof(InputData), &input);
+  clSetKernelArg(kernel_two, 5, sizeof(float), &width);
+  clSetKernelArg(kernel_two, 6, sizeof(float), &height);
+
+  // Create queue
+  cl_command_queue queue = clCreateCommandQueue(context, device_ids[0], 0, &error);
+  opencl_error_check(error);
+
+  // OpenCL setup ends here
+
   framebuffer->bind();
 
   unsigned int iteration = 0;
-  boost::chrono::milliseconds iteration_second( 1000 / 60 );
+  boost::chrono::milliseconds iteration_delta(static_cast<int>((1000.f / 60.f) * input.delta));
 
   while( !framebuffer->close() )
   {
     boost::chrono::high_resolution_clock::time_point timer_start = boost::chrono::high_resolution_clock::now();
 
+    // for(int i = 0; i < SIZE; ++i)
+    // {
+    //   data->a_buffer[i] = data->a_current[i];
+    //   data->b_buffer[i] = data->b_current[i];
+
+    //   float reaction = data->a_buffer[i] * (data->b_buffer[i] * data->b_buffer[i]);
+    //   data->a_current[i] = data->a_buffer[i] + (input.Da * laplacian(data->a_buffer, i, WIDTH, HEIGHT) - reaction + input.f * (1.f - data->a_buffer[i])) * input.delta;
+    //   data->b_current[i] = data->b_buffer[i] + (input.Db * laplacian(data->b_buffer, i, WIDTH, HEIGHT) + reaction - (input.k + input.f) * data->b_buffer[i]) * input.delta;
+    // }
+
+    // Run queue
+    std::size_t size[] = {SIZE};
+    error = clEnqueueNDRangeKernel(queue, (iteration % 2) ? kernel_one : kernel_two, 1, 0, size, NULL, 0, NULL, NULL);
+    opencl_error_check(error);
+
+    // Get data from GPU
+    error = clEnqueueReadBuffer(queue, cMem_a, CL_TRUE, 0, sizeof(float) * SIZE, data->a_current, 0, NULL, NULL);
+    opencl_error_check(error);
+
     for(int i = 0; i < SIZE; ++i)
     {
-      data->a_buffer[i] = data->a_current[i];
-      data->b_buffer[i] = data->b_current[i];
-
-      float reaction = data->a_buffer[i] * (data->b_buffer[i] * data->b_buffer[i]);
-      data->a_current[i] = data->a_buffer[i] + (input.Da * laplacian(data->a_buffer, i, WIDTH, HEIGHT) - reaction + input.f * (1.f - data->a_buffer[i])) * input.delta;
-      data->b_current[i] = data->b_buffer[i] + (input.Db * laplacian(data->b_buffer, i, WIDTH, HEIGHT) + reaction - (input.k + input.f) * data->b_buffer[i]) * input.delta;
-    }
-
-    for(int i = 0; i < SIZE; ++i)
-    {
+      float current = image[i * 3 + 0];
       image[i * 3 + 0] = data->a_current[i];
       image[i * 3 + 1] = data->a_current[i];
       image[i * 3 + 2] = data->a_current[i];
@@ -205,11 +330,23 @@ int main(void)
 
     boost::chrono::high_resolution_clock::time_point timer_end = boost::chrono::high_resolution_clock::now();
     boost::chrono::milliseconds iteration_time(boost::chrono::duration_cast<boost::chrono::milliseconds>(timer_end - timer_start).count());
-    if(iteration_time < iteration_second)
+    if(iteration_time < iteration_delta)
     {
-      boost::this_thread::sleep_for(iteration_second - iteration_time);
+      boost::this_thread::sleep_for(iteration_delta - iteration_time);
     }    
   }
+
+  // Cleanup
+  clReleaseCommandQueue(queue);
+  clReleaseMemObject(bMem_b);
+  clReleaseMemObject(bMem_a);
+  clReleaseMemObject(cMem_b);
+  clReleaseMemObject(cMem_a);
+  clReleaseKernel(kernel_two);
+  clReleaseKernel(kernel_one);
+  clReleaseProgram(program);
+  clReleaseContext(context);
+  delete[] device_ids;
 
   delete data;
   delete framebuffer;
