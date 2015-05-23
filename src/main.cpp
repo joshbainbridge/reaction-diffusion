@@ -191,7 +191,7 @@ int main(int argc, char const *argv[])
   // opencl_error_check(error);
 
   // Load source file
-  std::string file = read_file("kernals/image.cl");
+  std::string file = read_file("kernels/image.cl");
   const char* source[] = {file.c_str()};
 
   // Build program
@@ -206,7 +206,7 @@ int main(int argc, char const *argv[])
     exit(EXIT_FAILURE);
   }
 
-  // Resolution for kernal
+  // Resolution for kernel
   const float width = WIDTH;
   const float height = HEIGHT;
 
