@@ -112,42 +112,6 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
   }
 }
 
-int mod(const int _a, const int _b)
-{
-  int value = _a % _b;
-  if (value < 0)
-    value += _b;
-  return value;
-}
-
-float laplacian(const float* _array, const int _point, const int _width, const int _height)
-{
-  int xpos = _point % _width;
-  int ypos = _point / _width;
-  int positive_x = mod(xpos + 1, _width);
-  int negative_x = mod(xpos - 1, _width);
-  int positive_y = mod(ypos + 1, _height) * _width;
-  int negative_y = mod(ypos - 1, _height) * _width;
-
-  int index[] = {
-    negative_x + positive_y, xpos + positive_y, positive_x + positive_y,
-    negative_x + ypos * _width, xpos + ypos * _width, positive_x + ypos * _width,
-    negative_x + negative_y, xpos + negative_y, positive_x + negative_y
-  };
-
-  float weight[] = {
-    0.05f, 0.2f, 0.05f,
-    0.2f, -1.f, 0.2f,
-    0.05f, 0.2f, 0.05f
-  };
-
-  float output = _array[index[0]] * weight[0] + _array[index[1]] * weight[1] + _array[index[2]] * weight[2]
-  + _array[index[3]] * weight[3] + _array[index[4]] * weight[4] + _array[index[5]] * weight[5]
-  + _array[index[6]] * weight[6] + _array[index[7]] * weight[7] + _array[index[8]] * weight[8];
-
-  return output;
-}
-
 int main(int argc, char const *argv[])
 {
   InputData input;
@@ -162,37 +126,29 @@ int main(int argc, char const *argv[])
   GLFWwindow* window = framebuffer->init(WIDTH, HEIGHT, &input);
   glfwSetKeyCallback(window, keyCallback);
 
-  Perlin perlin;
   SimData *data = new SimData;
+  float *image = new float[SIZE*3];
+
+  Perlin perlin;
   for(int i = 0; i < SIZE; ++i)
   {
     float xpos = i % WIDTH;
     float ypos = i / WIDTH;
+
     if(perlin.noise(xpos / 100, ypos / 100, 0) > 0.4f)
     {
       data->a_current[i] = 1.f;
       data->b_current[i] = 1.f;
-      data->a_buffer[i] = 0.f;
-      data->b_buffer[i] = 0.f;
     }
     else
     {
       data->a_current[i] = 1.f;
       data->b_current[i] = 0.f;
-      data->a_buffer[i] = 0.f;
-      data->b_buffer[i] = 0.f;
     }
-  }
 
-  float *image = new float[SIZE*3];
-  for(int i = 0; i < SIZE; ++i)
-  {
-    image[i * 3 + 0] = data->a_current[i];
-    image[i * 3 + 1] = data->a_current[i];
-    image[i * 3 + 2] = data->a_current[i];
+    data->a_buffer[i] = 0.f;
+    data->b_buffer[i] = 0.f;
   }
-
-  framebuffer->image(image, WIDTH, HEIGHT);
 
   // OpenCL setup starts here
 
@@ -244,7 +200,7 @@ int main(int argc, char const *argv[])
   error = clBuildProgram(program, device_count, device_ids, NULL, NULL, NULL);
   if(error != CL_SUCCESS)
   {
-    char buffer[2048];
+    char buffer[1024];
     clGetProgramBuildInfo(program, device_ids[0], CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, NULL);
     std::cout << buffer << std::endl;
     exit(EXIT_FAILURE);
@@ -287,23 +243,12 @@ int main(int argc, char const *argv[])
   // OpenCL setup ends here
 
   framebuffer->bind();
-
   unsigned int iteration = 0;
   boost::chrono::milliseconds iteration_delta(static_cast<int>((1000.f / 60.f) * input.delta));
 
   while( !framebuffer->close() )
   {
     boost::chrono::high_resolution_clock::time_point timer_start = boost::chrono::high_resolution_clock::now();
-
-    // for(int i = 0; i < SIZE; ++i)
-    // {
-    //   data->a_buffer[i] = data->a_current[i];
-    //   data->b_buffer[i] = data->b_current[i];
-
-    //   float reaction = data->a_buffer[i] * (data->b_buffer[i] * data->b_buffer[i]);
-    //   data->a_current[i] = data->a_buffer[i] + (input.Da * laplacian(data->a_buffer, i, WIDTH, HEIGHT) - reaction + input.f * (1.f - data->a_buffer[i])) * input.delta;
-    //   data->b_current[i] = data->b_buffer[i] + (input.Db * laplacian(data->b_buffer, i, WIDTH, HEIGHT) + reaction - (input.k + input.f) * data->b_buffer[i]) * input.delta;
-    // }
 
     // Run queue
     std::size_t size[] = {SIZE};
