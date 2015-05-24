@@ -127,7 +127,7 @@ int main(int argc, char const *argv[])
   //Create framebuffer for displaying simulation
   Framebuffer *framebuffer = new Framebuffer();
 
-  // Initializing framebuffer and overriding key callback with input
+  // Initializing framebuffer and override key callback with input
   GLFWwindow* window = framebuffer->init(WIDTH, HEIGHT, &input);
   glfwSetKeyCallback(window, keyCallback);
 
@@ -139,16 +139,11 @@ int main(int argc, char const *argv[])
     float xpos = i % WIDTH;
     float ypos = i / WIDTH;
 
+    data->a_current[i] = 1.f;
+    data->b_current[i] = 0.f;
+
     if(perlin.noise(xpos / 100, ypos / 100, 0) > 0.4f)
-    {
-      data->a_current[i] = 1.f;
       data->b_current[i] = 1.f;
-    }
-    else
-    {
-      data->a_current[i] = 1.f;
-      data->b_current[i] = 0.f;
-    }
 
     data->a_buffer[i] = 0.f;
     data->b_buffer[i] = 0.f;
@@ -165,15 +160,32 @@ int main(int argc, char const *argv[])
   // Error code
   cl_int error = CL_SUCCESS;
 
-  CGLContextObj cgl_context = CGLGetCurrentContext();
-  CGLShareGroupObj sharegroup = CGLGetShareGroup(cgl_context);
+  #ifdef __APPLE__
+    CGLContextObj cgl_context = CGLGetCurrentContext();
+    CGLShareGroupObj sharegroup = CGLGetShareGroup(cgl_context);
+
+    const cl_context_properties context_properties[] = {
+      CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, (cl_context_properties)sharegroup,
+      CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(platform_id),
+      0
+    };
+  #elif __linux__
+    const cl_context_properties context_properties[] = {
+      CL_GL_CONTEXT_KHR, (cl_context_properties)glXGetCurrentContext(),
+      CL_GLX_DISPLAY_KHR, (cl_context_properties)glXGetCurrentDisplay(),
+      CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(platform_id),
+      0
+    };
+  #elif _WIN32
+    const cl_context_properties context_properties[] = {
+      CL_GL_CONTEXT_KHR, (cl_context_properties)wglGetCurrentContext(),
+      CL_WGL_HDC_KHR, (cl_context_properties)wglGetCurrentDC(),
+      CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(platform_id),
+      0
+    };
+  #endif
 
   // Context creation
-  const cl_context_properties context_properties[] = {
-    CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(platform_id),
-    CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, (cl_context_properties)sharegroup,
-    0
-  };
   cl_context context = clCreateContext(context_properties, device_count, device_ids, NULL, NULL, &error);
   opencl_error_check(error);
 
@@ -241,7 +253,7 @@ int main(int argc, char const *argv[])
   cl_command_queue queue = clCreateCommandQueue(context, device_ids[0], 0, &error);
   opencl_error_check(error);
 
-  // Make sure framebuffer is data is bound
+  // Make sure framebuffer's data is bound
   framebuffer->bind();
 
   unsigned int iteration = 0;
@@ -260,7 +272,7 @@ int main(int argc, char const *argv[])
     error = clEnqueueNDRangeKernel(queue, (iteration % 2) ? kernel_one : kernel_two, 1, 0, size, NULL, 0, NULL, NULL);
     opencl_error_check(error);
 
-    // Release Image
+    // Release image
     clEnqueueReleaseGLObjects(queue, 1, &cl_image, 0, NULL, NULL);
 
     // Draw framebuffer
