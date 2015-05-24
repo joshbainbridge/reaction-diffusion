@@ -4,7 +4,6 @@
 
 #include <boost/chrono.hpp>
 #include <boost/thread.hpp>
-#include <boost/random.hpp>
 #include <fstream>
 #include <string>
 
@@ -29,39 +28,7 @@ struct SimData
   float b_buffer[SIZE];
 };
 
-std::string read_file(const char _filepath[])
-{
-  std::string output;
-  std::ifstream file(_filepath);
-
-  if(file.is_open())
-  {
-    std::string line;
-    while(!file.eof())
-    {
-      std::getline(file, line);
-      output.append(line + "\n");
-    }
-  }
-  else
-  {
-    std::cout << "File could not be opened." << std::endl;
-    exit(EXIT_FAILURE);
-  }
-
-  file.close();
-  return output;
-}
-
-void opencl_error_check(const cl_int _error)
-{
-  if(_error != CL_SUCCESS)
-  {
-    std::cout << "OpenCL error: " << _error << std::endl;
-    exit(EXIT_FAILURE);
-  }
-}
-
+// Custom key callback for changing simulation parameters
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   InputData *input = static_cast<InputData*>(glfwGetWindowUserPointer(window));
@@ -112,8 +79,44 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
   }
 }
 
+// Read file function to load source for runtime kernel compilation
+std::string read_file(const char _filepath[])
+{
+  std::string output;
+  std::ifstream file(_filepath);
+
+  if(file.is_open())
+  {
+    std::string line;
+    while(!file.eof())
+    {
+      std::getline(file, line);
+      output.append(line + "\n");
+    }
+  }
+  else
+  {
+    std::cout << "File could not be opened." << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  file.close();
+  return output;
+}
+
+// Function to check OpenCL error codes
+void opencl_error_check(const cl_int _error)
+{
+  if(_error != CL_SUCCESS)
+  {
+    std::cout << "OpenCL error: " << _error << std::endl;
+    exit(EXIT_FAILURE);
+  }
+}
+
 int main(int argc, char const *argv[])
 {
+  // Simulation parameters
   InputData input;
   input.Da = 1.f;
   input.Db = 0.5f;
@@ -121,14 +124,15 @@ int main(int argc, char const *argv[])
   input.k = 0.051f;
   input.delta = 0.8f;
 
+  //Create framebuffer for displaying simulation
   Framebuffer *framebuffer = new Framebuffer();
 
+  // Initializing framebuffer and overriding key callback with input
   GLFWwindow* window = framebuffer->init(WIDTH, HEIGHT, &input);
   glfwSetKeyCallback(window, keyCallback);
 
+  // Initial values for simulation
   SimData *data = new SimData;
-  float *image = new float[SIZE*3];
-
   Perlin perlin;
   for(int i = 0; i < SIZE; ++i)
   {
@@ -150,9 +154,7 @@ int main(int argc, char const *argv[])
     data->b_buffer[i] = 0.f;
   }
 
-  // OpenCL setup starts here
-
-  // Setup
+  // OpenCL setup
   cl_platform_id platform_id;
   clGetPlatformIDs(1, &platform_id, NULL);
   cl_uint device_count;
@@ -163,23 +165,20 @@ int main(int argc, char const *argv[])
   // Error code
   cl_int error = CL_SUCCESS;
 
+  CGLContextObj cgl_context = CGLGetCurrentContext();
+  CGLShareGroupObj sharegroup = CGLGetShareGroup(cgl_context);
+
   // Context creation
   const cl_context_properties context_properties[] = {
     CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(platform_id),
+    CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, (cl_context_properties)sharegroup,
     0
   };
   cl_context context = clCreateContext(context_properties, device_count, device_ids, NULL, NULL, &error);
   opencl_error_check(error);
 
-  // GLuint m_texture;
-  // glGenTextures(1, &m_texture);
-  // glBindTexture(GL_TEXTURE_2D, m_texture);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-  // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-
   // Memory allocation
-  cl_mem cMem_a = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float) * SIZE, data->a_current, &error);
+  cl_mem cMem_a = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * SIZE, data->a_current, &error);
   opencl_error_check(error);
   cl_mem cMem_b = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * SIZE, data->b_current, &error);
   opencl_error_check(error);
@@ -187,8 +186,8 @@ int main(int argc, char const *argv[])
   opencl_error_check(error);
   cl_mem bMem_b = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * SIZE, data->b_buffer, &error);
   opencl_error_check(error);
-  // cl_mem mem = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, m_texture, &error);
-  // opencl_error_check(error);
+  cl_mem cl_image = clCreateFromGLTexture(context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, framebuffer->texture(), &error);
+  opencl_error_check(error);
 
   // Load source file
   std::string file = read_file("kernels/image.cl");
@@ -214,65 +213,64 @@ int main(int argc, char const *argv[])
   cl_kernel kernel_one = clCreateKernel(program, "square", &error);
   opencl_error_check(error);
 
-  // Set argurments for kernel one
+  // Set arguments for kernel one
   clSetKernelArg(kernel_one, 0, sizeof(cl_mem), &cMem_a);
   clSetKernelArg(kernel_one, 1, sizeof(cl_mem), &cMem_b);
   clSetKernelArg(kernel_one, 2, sizeof(cl_mem), &bMem_a);
   clSetKernelArg(kernel_one, 3, sizeof(cl_mem), &bMem_b);
-  clSetKernelArg(kernel_one, 4, sizeof(InputData), &input);
-  clSetKernelArg(kernel_one, 5, sizeof(float), &width);
-  clSetKernelArg(kernel_one, 6, sizeof(float), &height);
+  clSetKernelArg(kernel_one, 4, sizeof(cl_mem), &cl_image);
+  clSetKernelArg(kernel_one, 5, sizeof(InputData), &input);
+  clSetKernelArg(kernel_one, 6, sizeof(float), &width);
+  clSetKernelArg(kernel_one, 7, sizeof(float), &height);
 
   // Create kernel two
   cl_kernel kernel_two = clCreateKernel(program, "square", &error);
   opencl_error_check(error);
 
-  // Set argurments for kernel two
+  // Set arguments for kernel two
   clSetKernelArg(kernel_two, 0, sizeof(cl_mem), &bMem_a);
   clSetKernelArg(kernel_two, 1, sizeof(cl_mem), &bMem_b);
   clSetKernelArg(kernel_two, 2, sizeof(cl_mem), &cMem_a);
   clSetKernelArg(kernel_two, 3, sizeof(cl_mem), &cMem_b);
-  clSetKernelArg(kernel_two, 4, sizeof(InputData), &input);
-  clSetKernelArg(kernel_two, 5, sizeof(float), &width);
-  clSetKernelArg(kernel_two, 6, sizeof(float), &height);
+  clSetKernelArg(kernel_two, 4, sizeof(cl_mem), &cl_image);
+  clSetKernelArg(kernel_two, 5, sizeof(InputData), &input);
+  clSetKernelArg(kernel_two, 6, sizeof(float), &width);
+  clSetKernelArg(kernel_two, 7, sizeof(float), &height);
 
   // Create queue
   cl_command_queue queue = clCreateCommandQueue(context, device_ids[0], 0, &error);
   opencl_error_check(error);
 
-  // OpenCL setup ends here
-
+  // Make sure framebuffer is data is bound
   framebuffer->bind();
+
   unsigned int iteration = 0;
   boost::chrono::milliseconds iteration_delta(static_cast<int>((1000.f / 60.f) * input.delta));
 
   while( !framebuffer->close() )
   {
+    //Start loop timer
     boost::chrono::high_resolution_clock::time_point timer_start = boost::chrono::high_resolution_clock::now();
+
+    // Get image
+    clEnqueueAcquireGLObjects(queue, 1, &cl_image, 0, NULL, NULL);
 
     // Run queue
     std::size_t size[] = {SIZE};
     error = clEnqueueNDRangeKernel(queue, (iteration % 2) ? kernel_one : kernel_two, 1, 0, size, NULL, 0, NULL, NULL);
     opencl_error_check(error);
 
-    // Get data from GPU
-    error = clEnqueueReadBuffer(queue, cMem_a, CL_TRUE, 0, sizeof(float) * SIZE, data->a_current, 0, NULL, NULL);
-    opencl_error_check(error);
+    // Release Image
+    clEnqueueReleaseGLObjects(queue, 1, &cl_image, 0, NULL, NULL);
 
-    for(int i = 0; i < SIZE; ++i)
-    {
-      float current = image[i * 3 + 0];
-      image[i * 3 + 0] = data->a_current[i];
-      image[i * 3 + 1] = data->a_current[i];
-      image[i * 3 + 2] = data->a_current[i];
-    }
-
-    framebuffer->image(image, WIDTH, HEIGHT);
+    // Draw framebuffer
     framebuffer->draw();
 
+    // Update title with iteration count
     std::string title = "Graphics Environment Iteration: " + std::to_string(++iteration);
     framebuffer->title(title);
 
+    // Sleep thread so that time is consistent
     boost::chrono::high_resolution_clock::time_point timer_end = boost::chrono::high_resolution_clock::now();
     boost::chrono::milliseconds iteration_time(boost::chrono::duration_cast<boost::chrono::milliseconds>(timer_end - timer_start).count());
     if(iteration_time < iteration_delta)
@@ -283,6 +281,7 @@ int main(int argc, char const *argv[])
 
   // Cleanup
   clReleaseCommandQueue(queue);
+  clReleaseMemObject(cl_image);
   clReleaseMemObject(bMem_b);
   clReleaseMemObject(bMem_a);
   clReleaseMemObject(cMem_b);
@@ -295,7 +294,6 @@ int main(int argc, char const *argv[])
 
   delete data;
   delete framebuffer;
-  delete[] image;
 
   exit(EXIT_SUCCESS);
 }

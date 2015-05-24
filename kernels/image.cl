@@ -48,6 +48,7 @@ __kernel void square(
   __global float* b_current,
   __global float* a_buffer,
   __global float* b_buffer,
+  __write_only image2d_t image,
   struct InputData input,
   float width,
   float height)
@@ -58,4 +59,6 @@ __kernel void square(
 
   a_current[i] = a_buffer[i] + (input.Da * laplacian(a_buffer, i, width, height) - reaction + input.f * (1.f - a_buffer[i])) * input.delta;
   b_current[i] = b_buffer[i] + (input.Db * laplacian(b_buffer, i, width, height) + reaction - (input.k + input.f) * b_buffer[i]) * input.delta;
+
+  write_imagef(image, (int2)(i % (int)(width), i / (int)(width)), a_current[i]);
 }

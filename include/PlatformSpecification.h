@@ -2,17 +2,18 @@
 	#define PLATFORM_SPECIFICATION_H__
 	
 	#ifdef __APPLE__
-    #include "OpenCL/opencl.h"
+    #include <OpenCL/opencl.h>
+		#include <OpenGL/OpenGL.h>
 		#define GLFW_INCLUDE_GLCOREARB
 		#include <GLFW/glfw3.h>
 	#elif __linux__
-    #include "CL/cl.h"
+    #include <CL/cl.h>
 		#define USING_GLEW
     #define GLEW_STATIC
     #include <GL/glew.h>
     #include <GLFW/glfw3.h>
 	#elif _WIN32
-    #include "CL/cl.h"
+    #include <CL/cl.h>
 		#define USING_GLEW
 		#define GLEW_STATIC
 		#include <GL/glew.h>
